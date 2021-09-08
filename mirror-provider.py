@@ -11,6 +11,16 @@
 #
 # This program requires the dirhasher[2] program to be installed.
 #
+# During copying, if a mirror object exists for an archive that would be copied,
+# and that mirror object has a dirhash metadata header, that dirhash value
+# is used and the file is not copied.  This optimization lets us rebuild
+# mirrors efficiently from large ranges of existing provider versions.
+# However, this means that if the release archive is replaced after the
+# mirror has been generated, with a content change that would change its dirhash,
+# the mirror archives for that verison must be manually deleted and this program
+# run again so it will copy the changed archives to the mirror (and compute their
+# new dirhashes).  This is not expected to be a common situation.
+#
 # We expect keys in the input (releases) bucket to be formed like:
 #
 #   {rel_prefix}/{provider}_{version}_{os}_{arch}.zip
@@ -127,20 +137,14 @@ def object_exists(obj: 's3.Object') -> bool:
 
 
 def copy_archive(rel_obj: 's3.Object', mirror_obj: 's3.Object') -> Tuple[str, bool]:
-    # Read or compute the dirhash of the release archive
-    h1 = rel_obj.metadata.get(DIRHASH_METADATA)
-    if not h1:
-        h1 = dirhash(rel_obj)
+    # We can skip the copy if the mirror object exists and has a dirhash
+    if object_exists(mirror_obj) and mirror_obj.metadata.get(DIRHASH_METADATA):
+        return mirror_obj.metadata[DIRHASH_METADATA], False
 
-    # We can skip the copy if the mirror object exists with the correct dirhash
-    copy_required = True
-    if object_exists(mirror_obj) and mirror_obj.metadata.get(DIRHASH_METADATA) == h1:
-        copy_required = False
+    # Compute the dirhash of the release archive
+    h1 = dirhash(rel_obj)
 
     # Copy the archive to the mirror if it's not already there with the correct hash
-    if not copy_required:
-        return h1, False
-
     metadata = dict(rel_obj.metadata)
     metadata[DIRHASH_METADATA] = h1
     mirror_obj.copy_from(
