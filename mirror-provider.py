@@ -36,11 +36,11 @@
 #
 #   registry.terraform.io/hashicorp/aws/index.json
 #   registry.terraform.io/hashicorp/aws/3.55.0.json
-#   registry.terraform.io/hashicorp/aws/terraform-provider-aws_3.55.0_linux_x86_64.zip
-#   registry.terraform.io/hashicorp/aws/terraform-provider-aws_3.55.0_windows_x86_64.zip
+#   registry.terraform.io/hashicorp/aws/3.55.0/terraform-provider-aws_3.55.0_linux_x86_64.zip
+#   registry.terraform.io/hashicorp/aws/3.55.0/terraform-provider-aws_3.55.0_windows_x86_64.zip
 #   registry.terraform.io/hashicorp/aws/3.56.0.json
-#   registry.terraform.io/hashicorp/aws/terraform-provider-aws_3.56.0_linux_x86_64.zip
-#   registry.terraform.io/hashicorp/aws/terraform-provider-aws_3.56.0_windows_x86_64.zip
+#   registry.terraform.io/hashicorp/aws/3.56.0/terraform-provider-aws_3.56.0_linux_x86_64.zip
+#   registry.terraform.io/hashicorp/aws/3.56.0/terraform-provider-aws_3.56.0_windows_x86_64.zip
 #
 # [1] https://www.terraform.io/docs/internals/provider-network-mirror-protocol.html
 # [2] https://github.com/arpio/dirhasher
@@ -187,17 +187,17 @@ def main() -> None:
             version_data = {'archives': {}}
             for archive in sorted(archives):
                 rel_obj = rel_bucket.Object(archive.key)
-                mirror_obj = mirror_bucket.Object(f'{out_prefix}{archive.file_name}')
+                mirror_obj = mirror_bucket.Object(f'{out_prefix}{archive.version}/{archive.file_name}')
 
                 h1, copied = copy_archive(rel_obj, mirror_obj)
                 copy_status = '+' if copied else '='
                 print(f'  {copy_status} {mirror_obj.bucket_name}/{mirror_obj.key} {h1}')
 
-                # Construct the entry for the version file
+                # Construct the entry for the version file with a relative url
                 os_arch = f'{archive.os}_{archive.arch}'
                 version_data['archives'][os_arch] = {
                     'hashes': [h1],
-                    'url': archive.file_name,
+                    'url': f'{archive.version}/{archive.file_name}',
                 }
 
             # Put the version JSON
