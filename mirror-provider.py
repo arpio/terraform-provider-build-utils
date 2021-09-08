@@ -183,18 +183,24 @@ def main() -> None:
         print(f'{provider}')
         versions = provider_versions[provider]
 
+        copied_any_this_provider = False
         index_data = {'versions': {}}
         for version in sorted(versions):
             print(f' {version}')
             archives = versions[version]
 
+            copied_any_this_version = False
             version_data = {'archives': {}}
             for archive in sorted(archives):
                 rel_obj = rel_bucket.Object(archive.key)
                 mirror_obj = mirror_bucket.Object(f'{out_prefix}{archive.version}/{archive.file_name}')
 
                 h1, copied = copy_archive(rel_obj, mirror_obj)
-                copy_status = '+' if copied else '='
+                if copied:
+                    copied_any_this_version = True
+                    copy_status = '+'
+                else:
+                    copy_status = '='
                 print(f'  {copy_status} {mirror_obj.bucket_name}/{mirror_obj.key} {h1}')
 
                 # Construct the entry for the version file with a relative url
@@ -204,25 +210,34 @@ def main() -> None:
                     'url': f'{archive.version}/{archive.file_name}',
                 }
 
-            # Put the version JSON
+            # Put a version JSON if we copied archives for this version
             version_obj = mirror_bucket.Object(f'{out_prefix}{version}.json')
-            version_obj.put(
-                Body=bytes(json.dumps(version_data, sort_keys=True, indent=2), 'utf-8'),
-                ContentType='application/json',
-            )
-            print(f'  + {version_obj.bucket_name}/{version_obj.key}')
+            if copied_any_this_version or not object_exists(version_obj):
+                version_obj.put(
+                    Body=bytes(json.dumps(version_data, sort_keys=True, indent=2), 'utf-8'),
+                    ContentType='application/json',
+                )
+                copied_any_this_provider = True
+                copy_status = '+'
+            else:
+                copy_status = '='
+            print(f'  {copy_status} {version_obj.bucket_name}/{version_obj.key}')
 
             # Add an entry for this version to the index
             index_data['versions'][version] = {}
 
-        # Put the index JSON
+        # Put the index JSON if we copied any archives for the provider
         index_obj = mirror_bucket.Object(f'{out_prefix}index.json')
-        index_obj.put(
-            Body=bytes(json.dumps(index_data, sort_keys=True, indent=2), 'utf-8'),
-            ContentType='application/json',
-        )
+        if copied_any_this_provider or not object_exists(index_obj):
+            index_obj.put(
+                Body=bytes(json.dumps(index_data, sort_keys=True, indent=2), 'utf-8'),
+                ContentType='application/json',
+            )
+            copy_status = '+'
+        else:
+            copy_status = '='
         print(f' *')
-        print(f'  + {index_obj.bucket_name}/{index_obj.key}')
+        print(f'  {copy_status} {index_obj.bucket_name}/{index_obj.key}')
 
 
 if __name__ == '__main__':
